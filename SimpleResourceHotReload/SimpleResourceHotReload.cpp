@@ -191,20 +191,7 @@ simple_hot_reload::simple_hot_reload(): h_dir_(nullptr), olp_(), event_(nullptr)
 
 simple_hot_reload::~simple_hot_reload()
 {
-    if (m_b_thread_exec_ != nullptr)
-    {
-        // 結果取得に失敗した場合
-        if (h_dir_ != nullptr)
-        {
-            CloseHandle(event_);
-            CancelIoEx(h_dir_, &olp_);
-            h_dir_ = nullptr;
-            event_ = nullptr;
-        }
-
-        m_b_thread_exec_.reset(nullptr);
-        m_hr_thread_.join();
-    }
+	hot_reload_end();
 }
 
 //---------------------------------------------------------------------------------------------------------
@@ -243,7 +230,6 @@ void simple_hot_reload::hot_reload_exec()
 
 			while (m_b_thread_exec_)
 			{
-
 				// イベントの手動リセット
 				ResetEvent(event_);
 				olp_ = {};
@@ -266,8 +252,7 @@ void simple_hot_reload::hot_reload_exec()
 				while (m_b_thread_exec_)
 				{
 					// 変更通知まち
-					const auto wait_result = WaitForSingleObject(event_, 1000);
-					if (wait_result != WAIT_TIMEOUT)
+					if (const auto wait_result = WaitForSingleObject(event_, 1000); wait_result != WAIT_TIMEOUT)
 					{
 						// 変更通知があった場合 (イベントがシグナル状態になった場合)
 						break;
@@ -293,15 +278,7 @@ void simple_hot_reload::hot_reload_exec()
 				if (!GetOverlappedResult(h_dir_, &olp_, &size, false))
 				{
 					// 結果取得に失敗した場合
-					if (h_dir_ != nullptr)
-					{
-						CloseHandle(event_);
-						CancelIoEx(h_dir_, &olp_);
-						h_dir_ = nullptr;
-						event_ = nullptr;
-					}
-					m_b_thread_exec_.reset(nullptr);
-					m_hr_thread_.join();
+					hot_reload_end();
 					return;
 				}
 
@@ -364,6 +341,25 @@ void simple_hot_reload::hot_reload_exec()
 				p_buf = buf.data();
 			}
 		});
+}
+
+/**
+ * @brief ホットリロード終了
+ */
+void simple_hot_reload::hot_reload_end()
+{
+	if (m_b_thread_exec_ != nullptr && *m_b_thread_exec_)
+	{
+		if (h_dir_ != nullptr)
+		{
+			CloseHandle(event_);
+			CancelIoEx(h_dir_, &olp_);
+			h_dir_ = nullptr;
+			event_ = nullptr;
+		}
+		m_b_thread_exec_.reset(nullptr);
+		m_hr_thread_.join();
+	}
 }
 
 /**
